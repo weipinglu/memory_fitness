@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Number Recall Trainer</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    body { margin: 24px; display: grid; gap: 16px; place-items: start; }
+    main { width: min(720px, 100%); display: grid; gap: 16px; }
+    h1 { font-size: 1.25rem; margin: 0; }
+    .grid { display: grid; gap: 12px; }
+    .panel { padding: 12px; border: 1px solid #e5e5e5; border-radius: 12px; background: #fafafa; }
+    .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    label { display: grid; gap: 6px; font-size: 0.95rem; }
+    select, input[type="number"], input[type="range"] {
+      padding: 8px; border-radius: 8px; border: 1px solid #ccc; font-size: 1rem;
+      background: white;
+    }
+    .checkbox { display: flex; align-items: center; gap: 8px; }
+    .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    button {
+      padding: 12px 16px; font-size: 1rem; border-radius: 10px; border: 1px solid #ccc; cursor: pointer; background: white;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .big { font-size: 1.8rem; letter-spacing: 0.04em; word-spacing: 0.2em; }
+    .meta { color: #555; font-size: 0.95rem; }
+    .row { display: flex; align-items: center; gap: 8px; }
+    .value-badge { min-width: 3ch; display: inline-block; text-align: right; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Number Recall Trainer</h1>
+
+  <!-- Settings -->
+  <section class="panel grid" aria-label="settings">
+    <div class="fields">
+      <label>
+        Language
+        <select id="langSelect">
+          <option value="en-US">English (en-US)</option>
+          <option value="zh-CN">中文（普通话, zh-CN）</option>
+          <option value="zh-TW">中文（繁體, zh-TW）</option>
+        </select>
+      </label>
+
+      <label>
+        Voice (device)
+        <select id="voiceSelect">
+          <option value="">Auto (best available)</option>
+        </select>
+      </label>
+
+      <label>
+        Number of digits (N)
+        <input id="digitsInput" type="number" min="1" max="24" value="6" />
+      </label>
+
+      <label>
+        Voice speed (rate)
+        <div class="row">
+          <input id="rateInput" type="range" min="0.5" max="1.8" step="0.05" value="1.0" />
+          <span class="meta"><span id="rateValue" class="value-badge">1.00</span>×</span>
+        </div>
+      </label>
+    </div>
+
+    <div class="fields">
+      <label class="checkbox">
+        <input id="perDigit" type="checkbox" checked />
+        Speak digits one-by-one (e.g., “1, 2, 3” / “一、二、三”)
+      </label>
+
+      <label class="checkbox">
+        <input id="allowLeadingZeros" type="checkbox" />
+        Allow leading zeros (e.g., “00753”)
+      </label>
+    </div>
+
+    <div class="meta">
+      Tip: Mobile browsers require a user tap before speech works—your Start button press is enough.
+    </div>
+  </section>
+
+  <!-- Controls -->
+  <section class="controls">
+    <button id="speakBtn">Start (Speak)</button>
+    <button id="revealBtn" disabled>Reveal</button>
+  </section>
+
+  <!-- Output -->
+  <section class="panel grid">
+    <div class="meta">Current number:</div>
+    <div id="numberOut" class="big" aria-live="polite">—</div>
+    <div class="meta">Elapsed since spoken: <span id="elapsedOut">—</span></div>
+  </section>
+</main>
+
+<script>
+  // ---------- State ----------
+  let currentDigits = null;
+  let t0 = null;            // timestamp (performance.now) when speech ended
+  let speaking = false;
+  let voicesCache = [];
+
+  // ---------- Elements ----------
+  const langSelect = document.getElementById('langSelect');
+  const voiceSelect = document.getElementById('voiceSelect');
+  const digitsInput = document.getElementById('digitsInput');
+  const rateInput = document.getElementById('rateInput');
+  const rateValue = document.getElementById('rateValue');
+  const perDigit = document.getElementById('perDigit');
+  const allowLeadingZeros = document.getElementById('allowLeadingZeros');
+  const speakBtn = document.getElementById('speakBtn');
+  const revealBtn = document.getElementById('revealBtn');
+  const numberOut = document.getElementById('numberOut');
+  const elapsedOut = document.getElementById('elapsedOut');
+
+  // ---------- Persistence ----------
+  const SETTINGS_KEY = 'nr_settings_v1';
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (s.lang) langSelect.value = s.lang;
+      if (s.voiceURI) voiceSelect.value = s.voiceURI;
+      if (Number.isFinite(s.n)) digitsInput.value = s.n;
+      if (Number.isFinite(s.rate)) { rateInput.value = s.rate; rateValue.textContent = Number(s.rate).toFixed(2); }
+      if (typeof s.perDigit === 'boolean') perDigit.checked = s.perDigit;
+      if (typeof s.allowZero === 'boolean') allowLeadingZeros.checked = s.allowZero;
+    } catch {}
+  }
+  function saveSettings() {
+    const s = {
+      lang: langSelect.value,
+      voiceURI: voiceSelect.value,
+      n: parseInt(digitsInput.value || '6', 10),
+      rate: parseFloat(rateInput.value || '1'),
+      perDigit: !!perDigit.checked,
+      allowZero: !!allowLeadingZeros.checked
+    };
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  }
+
+  // ---------- Utilities ----------
+  function randomNDigitString(n, allowZeroLead = false) {
+    if (n <= 0) return "";
+    let s = "";
+    for (let i = 0; i < n; i++) s += Math.floor(Math.random() * 10);
+    if (!allowZeroLead && s[0] === '0') s = (1 + Math.floor(Math.random() * 9)) + s.slice(1);
+    return s;
+  }
+
+  const zhMap = { "0":"零", "1":"一", "2":"二", "3":"三", "4":"四", "5":"五", "6":"六", "7":"七", "8":"八", "9":"九" };
+  function toChineseDigits(digs) { return digs.split("").map(d => zhMap[d] ?? d).join(""); }
+
+  function spokenForm(digs, lang, perDigitMode) {
+    // Per-digit mode: speak each digit distinctly
+    if (perDigitMode) {
+      if (lang.startsWith('zh')) {
+        // Use Chinese numerals with Chinese comma for cadence
+        return toChineseDigits(digs).split("").join("、");
+      } else {
+        return digs.split("").join(", ");
+      }
+    }
+    // Whole string: let the TTS engine decide how to read it
+    if (lang.startsWith('zh')) {
+      // In Chinese, to ensure digits aren’t read as a large number name, still convert to Chinese digits without separators
+      return toChineseDigits(digs);
+    }
+    return digs;
+  }
+
+  function resetRound() {
+    numberOut.textContent = '—';
+    elapsedOut.textContent = '—';
+    currentDigits = null;
+    t0 = null;
+  }
+
+  // ---------- Speech ----------
+  function listVoices() {
+    voicesCache = speechSynthesis.getVoices() || [];
+    populateVoiceSelect();
+  }
+
+  function populateVoiceSelect() {
+    const lang = langSelect.value;
+    const filtered = voicesCache.filter(v => v.lang && v.lang.toLowerCase().startsWith(lang.toLowerCase()));
+    const previous = voiceSelect.value;
+    voiceSelect.innerHTML = '<option value="">Auto (best available)</option>';
+
+    filtered.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.voiceURI || v.name || '';
+      opt.textContent = `${v.name} (${v.lang})`;
+      voiceSelect.appendChild(opt);
+    });
+
+    // Try to keep previous selection if it still exists
+    if ([...voiceSelect.options].some(o => o.value === previous)) {
+      voiceSelect.value = previous;
+    } else {
+      voiceSelect.value = '';
+    }
+  }
+
+  function chooseVoice(lang, voiceURI) {
+    if (!voicesCache.length) return null;
+    if (voiceURI) {
+      const exact = voicesCache.find(v => (v.voiceURI === voiceURI) || (v.name === voiceURI));
+      if (exact) return exact;
+    }
+    // Fallback: first voice matching language
+    const matchLang = voicesCache.find(v => v.lang && v.lang.toLowerCase().startsWith(lang.toLowerCase()));
+    if (matchLang) return matchLang;
+    // Last resort: default voice
+    return speechSynthesis.getVoices()[0] || null;
+  }
+
+  function speakText(text, langCode, rate, voiceURI, onend) {
+    try {
+      window.speechSynthesis.cancel(); // stop any previous speech
+
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = langCode;
+      utter.rate = rate;
+
+      const chosen = chooseVoice(langCode, voiceURI);
+      if (chosen) utter.voice = chosen;
+
+      utter.onend = () => {
+        speaking = false;
+        t0 = performance.now(); // start timing when speech actually ends
+        if (typeof onend === 'function') onend();
+      };
+      utter.onerror = () => {
+        speaking = false;
+        t0 = performance.now(); // still start timer for usability
+      };
+
+      speaking = true;
+      window.speechSynthesis.speak(utter);
+    } catch {
+      speaking = false;
+      t0 = performance.now();
+      if (typeof onend === 'function') onend();
+    }
+  }
+
+  // ---------- Events ----------
+  // Keep rate badge in sync
+  rateInput.addEventListener('input', () => {
+    rateValue.textContent = Number(rateInput.value).toFixed(2);
+    saveSettings();
+  });
+
+  // Persist on changes
+  [langSelect, voiceSelect, digitsInput, perDigit, allowLeadingZeros].forEach(el => {
+    el.addEventListener('change', saveSettings);
+  });
+
+  // Refresh voices when language changes
+  langSelect.addEventListener('change', () => {
+    populateVoiceSelect();
+  });
+
+  // Start (Speak)
+  speakBtn.addEventListener('click', () => {
+    resetRound();
+
+    const n = Math.max(1, Math.min(24, parseInt(digitsInput.value || '6', 10)));
+    const allowZeros = !!allowLeadingZeros.checked;
+    const lang = langSelect.value;
+    const rate = parseFloat(rateInput.value || '1.0');
+    const voiceURI = voiceSelect.value || '';
+
+    currentDigits = randomNDigitString(n, allowZeros);
+    const toSpeak = spokenForm(currentDigits, lang, !!perDigit.checked);
+
+    speakBtn.disabled = true;
+    revealBtn.disabled = true;
+
+    speakText(toSpeak, lang, rate, voiceURI, () => {
+      speakBtn.disabled = false;
+      revealBtn.disabled = false;
+    });
+  });
+
+  // Reveal
+  revealBtn.addEventListener('click', () => {
+    if (!currentDigits) return;
+
+    // If still speaking, stop and mark time if needed
+    if (speaking) {
+      window.speechSynthesis.cancel();
+      speaking = false;
+      if (!t0) t0 = performance.now();
+    }
+
+    numberOut.textContent = currentDigits;
+
+    const now = performance.now();
+    const elapsedSec = t0 ? (now - t0) / 1000 : 0;
+    elapsedOut.textContent = `${elapsedSec.toFixed(2)} s`;
+
+    // Optional: keep Reveal enabled if you want to re-check time; here we disable to prevent double-click confusion
+    revealBtn.disabled = true;
+  });
+
+  // ---------- Init ----------
+  loadSettings();
+  rateValue.textContent = Number(rateInput.value).toFixed(2);
+
+  // Voice enumeration is async in some browsers; handle both paths
+  listVoices();
+  if (typeof speechSynthesis !== 'undefined') {
+    speechSynthesis.onvoiceschanged = () => {
+      listVoices();
+      populateVoiceSelect();
+    };
+  }
+</script>
+</body>
+</html>
