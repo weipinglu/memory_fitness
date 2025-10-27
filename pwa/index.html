@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="description" content="Offline-friendly number recall trainer with bilingual speech synthesis." />
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Recall" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="stylesheet" href="./styles.css" />
+  <title>Number Recall Trainer</title>
+</head>
+<body>
+<main>
+  <h1>Number Recall Trainer</h1>
+
+  <!-- Settings -->
+  <section class="panel grid" aria-label="settings">
+    <div class="fields">
+      <label>
+        Language
+        <select id="langSelect">
+          <option value="en-US">English (en-US)</option>
+          <option value="zh-CN">中文（普通话, zh-CN）</option>
+          <option value="zh-TW">中文（繁體, zh-TW）</option>
+        </select>
+      </label>
+
+      <label>
+        Voice (device)
+        <select id="voiceSelect">
+          <option value="">Auto (best available)</option>
+        </select>
+      </label>
+
+      <label>
+        Number of digits (N)
+        <input id="digitsInput" type="number" min="1" max="24" value="6" />
+      </label>
+
+      <label>
+        Voice speed (rate)
+        <div class="row">
+          <input id="rateInput" type="range" min="0.5" max="1.8" step="0.05" value="1.0" />
+          <span class="meta"><span id="rateValue" class="value-badge">1.00</span>×</span>
+        </div>
+      </label>
+    </div>
+
+    <div class="fields">
+      <label class="checkbox">
+        <input id="perDigit" type="checkbox" checked />
+        Speak digits one-by-one (e.g., “1, 2, 3” / “一、二、三”)
+      </label>
+
+      <label class="checkbox">
+        <input id="allowLeadingZeros" type="checkbox" />
+        Allow leading zeros (e.g., “00753”)
+      </label>
+    </div>
+
+    <div class="meta">
+      Tip: Mobile browsers require a user tap before speech works—your Start button press is enough.
+    </div>
+  </section>
+
+  <!-- Controls -->
+  <section class="controls">
+    <button id="speakBtn">Start (Speak)</button>
+    <button id="revealBtn" disabled>Reveal</button>
+  </section>
+
+  <!-- Output -->
+  <section class="panel grid">
+    <div class="meta">Current number:</div>
+    <div id="numberOut" class="big" aria-live="polite">—</div>
+    <div class="meta">Elapsed since spoken: <span id="elapsedOut">—</span></div>
+  </section>
+</main>
+
+<script src="./app.js" defer></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./service-worker.js').catch(err => {
+        console.warn('Service worker registration failed', err);
+      });
+    });
+  }
+</script>
+</body>
+</html>
