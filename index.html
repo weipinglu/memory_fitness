@@ -67,11 +67,6 @@
 
     <div class="fields">
       <label class="checkbox">
-        <input id="perDigit" type="checkbox" checked />
-        Speak digits one-by-one (e.g., “1, 2, 3” / “一、二、三”)
-      </label>
-
-      <label class="checkbox">
         <input id="allowLeadingZeros" type="checkbox" />
         Allow leading zeros (e.g., “00753”)
       </label>
@@ -109,7 +104,6 @@
   const digitsInput = document.getElementById('digitsInput');
   const rateInput = document.getElementById('rateInput');
   const rateValue = document.getElementById('rateValue');
-  const perDigit = document.getElementById('perDigit');
   const allowLeadingZeros = document.getElementById('allowLeadingZeros');
   const speakBtn = document.getElementById('speakBtn');
   const revealBtn = document.getElementById('revealBtn');
@@ -127,7 +121,6 @@
       if (s.voiceURI) voiceSelect.value = s.voiceURI;
       if (Number.isFinite(s.n)) digitsInput.value = s.n;
       if (Number.isFinite(s.rate)) { rateInput.value = s.rate; rateValue.textContent = Number(s.rate).toFixed(2); }
-      if (typeof s.perDigit === 'boolean') perDigit.checked = s.perDigit;
       if (typeof s.allowZero === 'boolean') allowLeadingZeros.checked = s.allowZero;
     } catch {}
   }
@@ -137,7 +130,6 @@
       voiceURI: voiceSelect.value,
       n: parseInt(digitsInput.value || '6', 10),
       rate: parseFloat(rateInput.value || '1'),
-      perDigit: !!perDigit.checked,
       allowZero: !!allowLeadingZeros.checked
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
@@ -258,7 +250,7 @@
   });
 
   // Persist on changes
-  [langSelect, voiceSelect, digitsInput, perDigit, allowLeadingZeros].forEach(el => {
+  [langSelect, voiceSelect, digitsInput, allowLeadingZeros].forEach(el => {
     el.addEventListener('change', saveSettings);
   });
 
@@ -278,7 +270,7 @@
     const voiceURI = voiceSelect.value || '';
 
     currentDigits = randomNDigitString(n, allowZeros);
-    const toSpeak = spokenForm(currentDigits, lang, !!perDigit.checked);
+    const toSpeak = spokenForm(currentDigits, lang, true);
 
     speakBtn.disabled = true;
     revealBtn.disabled = true;

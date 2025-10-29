@@ -12,7 +12,6 @@ const voiceSelect = document.getElementById('voiceSelect');
 const digitsInput = document.getElementById('digitsInput');
 const rateInput = document.getElementById('rateInput');
 const rateValue = document.getElementById('rateValue');
-const perDigit = document.getElementById('perDigit');
 const allowLeadingZeros = document.getElementById('allowLeadingZeros');
 const speakBtn = document.getElementById('speakBtn');
 const revealBtn = document.getElementById('revealBtn');
@@ -33,7 +32,6 @@ function loadSettings() {
       rateInput.value = s.rate;
       rateValue.textContent = Number(s.rate).toFixed(2);
     }
-    if (typeof s.perDigit === 'boolean') perDigit.checked = s.perDigit;
     if (typeof s.allowZero === 'boolean') allowLeadingZeros.checked = s.allowZero;
   } catch {
     // ignore localStorage errors
@@ -45,7 +43,6 @@ function saveSettings() {
     voiceURI: voiceSelect.value,
     n: parseInt(digitsInput.value || '6', 10),
     rate: parseFloat(rateInput.value || '1'),
-    perDigit: !!perDigit.checked,
     allowZero: !!allowLeadingZeros.checked
   };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
@@ -167,7 +164,7 @@ rateInput.addEventListener('input', () => {
 });
 
 // Persist on changes
-[langSelect, voiceSelect, digitsInput, perDigit, allowLeadingZeros].forEach(el => {
+[langSelect, voiceSelect, digitsInput, allowLeadingZeros].forEach(el => {
   el.addEventListener('change', saveSettings);
 });
 
@@ -187,7 +184,7 @@ speakBtn.addEventListener('click', () => {
   const voiceURI = voiceSelect.value || '';
 
   currentDigits = randomNDigitString(n, allowZeros);
-  const toSpeak = spokenForm(currentDigits, lang, !!perDigit.checked);
+  const toSpeak = spokenForm(currentDigits, lang, true);
 
   speakBtn.disabled = true;
   revealBtn.disabled = true;
