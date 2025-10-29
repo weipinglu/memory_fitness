@@ -65,13 +65,6 @@
       </label>
     </div>
 
-    <div class="fields">
-      <label class="checkbox">
-        <input id="allowLeadingZeros" type="checkbox" />
-        Allow leading zeros (e.g., “00753”)
-      </label>
-    </div>
-
     <div class="meta">
       Tip: Mobile browsers require a user tap before speech works—your Start button press is enough.
     </div>
@@ -104,7 +97,6 @@
   const digitsInput = document.getElementById('digitsInput');
   const rateInput = document.getElementById('rateInput');
   const rateValue = document.getElementById('rateValue');
-  const allowLeadingZeros = document.getElementById('allowLeadingZeros');
   const speakBtn = document.getElementById('speakBtn');
   const revealBtn = document.getElementById('revealBtn');
   const numberOut = document.getElementById('numberOut');
@@ -121,7 +113,6 @@
       if (s.voiceURI) voiceSelect.value = s.voiceURI;
       if (Number.isFinite(s.n)) digitsInput.value = s.n;
       if (Number.isFinite(s.rate)) { rateInput.value = s.rate; rateValue.textContent = Number(s.rate).toFixed(2); }
-      if (typeof s.allowZero === 'boolean') allowLeadingZeros.checked = s.allowZero;
     } catch {}
   }
   function saveSettings() {
@@ -129,8 +120,7 @@
       lang: langSelect.value,
       voiceURI: voiceSelect.value,
       n: parseInt(digitsInput.value || '6', 10),
-      rate: parseFloat(rateInput.value || '1'),
-      allowZero: !!allowLeadingZeros.checked
+      rate: parseFloat(rateInput.value || '1')
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
   }
@@ -250,7 +240,7 @@
   });
 
   // Persist on changes
-  [langSelect, voiceSelect, digitsInput, allowLeadingZeros].forEach(el => {
+  [langSelect, voiceSelect, digitsInput].forEach(el => {
     el.addEventListener('change', saveSettings);
   });
 
@@ -264,12 +254,11 @@
     resetRound();
 
     const n = Math.max(1, Math.min(24, parseInt(digitsInput.value || '6', 10)));
-    const allowZeros = !!allowLeadingZeros.checked;
     const lang = langSelect.value;
     const rate = parseFloat(rateInput.value || '1.0');
     const voiceURI = voiceSelect.value || '';
 
-    currentDigits = randomNDigitString(n, allowZeros);
+    currentDigits = randomNDigitString(n, false);
     const toSpeak = spokenForm(currentDigits, lang, true);
 
     speakBtn.disabled = true;
