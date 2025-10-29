@@ -57,11 +57,12 @@
       </label>
 
       <label>
-        Voice speed (rate)
-        <div class="row">
-          <input id="rateInput" type="range" min="0.5" max="1.8" step="0.05" value="1.0" />
-          <span class="meta"><span id="rateValue" class="value-badge">1.00</span>×</span>
-        </div>
+        Voice speed
+        <select id="rateSelect">
+          <option value="0.5">Slow</option>
+          <option value="1" selected>Normal</option>
+          <option value="1.5">Fast</option>
+        </select>
       </label>
     </div>
 
@@ -92,8 +93,7 @@
   const langSelect = document.getElementById('langSelect');
   const voiceSelect = document.getElementById('voiceSelect');
   const digitsInput = document.getElementById('digitsInput');
-  const rateInput = document.getElementById('rateInput');
-  const rateValue = document.getElementById('rateValue');
+  const rateSelect = document.getElementById('rateSelect');
   const speakBtn = document.getElementById('speakBtn');
   const revealBtn = document.getElementById('revealBtn');
   const numberOut = document.getElementById('numberOut');
@@ -109,7 +109,10 @@
       if (s.lang) langSelect.value = s.lang;
       if (s.voiceURI) voiceSelect.value = s.voiceURI;
       if (Number.isFinite(s.n)) digitsInput.value = s.n;
-      if (Number.isFinite(s.rate)) { rateInput.value = s.rate; rateValue.textContent = Number(s.rate).toFixed(2); }
+      if (Number.isFinite(s.rate)) {
+        const str = String(s.rate);
+        if (['0.5', '1', '1.5'].includes(str)) rateSelect.value = str;
+      }
     } catch {}
   }
   function saveSettings() {
@@ -117,7 +120,7 @@
       lang: langSelect.value,
       voiceURI: voiceSelect.value,
       n: parseInt(digitsInput.value || '6', 10),
-      rate: parseFloat(rateInput.value || '1')
+      rate: parseFloat(rateSelect.value || '1')
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
   }
@@ -230,14 +233,8 @@
   }
 
   // ---------- Events ----------
-  // Keep rate badge in sync
-  rateInput.addEventListener('input', () => {
-    rateValue.textContent = Number(rateInput.value).toFixed(2);
-    saveSettings();
-  });
-
   // Persist on changes
-  [langSelect, voiceSelect, digitsInput].forEach(el => {
+  [langSelect, voiceSelect, digitsInput, rateSelect].forEach(el => {
     el.addEventListener('change', saveSettings);
   });
 
@@ -252,7 +249,7 @@
 
     const n = Math.max(1, Math.min(24, parseInt(digitsInput.value || '6', 10)));
     const lang = langSelect.value;
-    const rate = parseFloat(rateInput.value || '1.0');
+    const rate = parseFloat(rateSelect.value || '1.0');
     const voiceURI = voiceSelect.value || '';
 
     currentDigits = randomNDigitString(n, false);
@@ -290,7 +287,6 @@
 
   // ---------- Init ----------
   loadSettings();
-  rateValue.textContent = Number(rateInput.value).toFixed(2);
 
   // Voice enumeration is async in some browsers; handle both paths
   listVoices();
