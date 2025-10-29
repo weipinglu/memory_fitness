@@ -28,6 +28,7 @@
         <select id="langSelect">
           <option value="en-US">English (en-US)</option>
           <option value="zh-CN">中文（普通话, zh-CN）</option>
+          <option value="zh-TW">中文（繁體, zh-TW）</option>
         </select>
       </label>
 
@@ -53,6 +54,11 @@
     </div>
 
     <div class="fields">
+      <label class="checkbox">
+        <input id="perDigit" type="checkbox" checked />
+        Speak digits one-by-one (e.g., “1, 2, 3” / “一、二、三”)
+      </label>
+
       <label class="checkbox">
         <input id="allowLeadingZeros" type="checkbox" />
         Allow leading zeros (e.g., “00753”)
