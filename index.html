@@ -150,8 +150,16 @@
   function randomNDigitString(n, allowZeroLead = false) {
     if (n <= 0) return "";
     let s = "";
-    for (let i = 0; i < n; i++) s += Math.floor(Math.random() * 10);
-    if (!allowZeroLead && s[0] === '0') s = (1 + Math.floor(Math.random() * 9)) + s.slice(1);
+    for (let i = 0; i < n; i++) {
+      let digit = Math.floor(Math.random() * 10);
+      if (i === 0 && !allowZeroLead) {
+        while (digit === 0) digit = Math.floor(Math.random() * 10);
+      }
+      if (i > 0) {
+        while (digit === Number(s[i - 1])) digit = Math.floor(Math.random() * 10);
+      }
+      s += digit;
+    }
     return s;
   }
 
