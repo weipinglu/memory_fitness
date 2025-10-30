@@ -22,6 +22,9 @@
       width: 100%;
       box-sizing: border-box;
     }
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type="number"] { -moz-appearance: textfield; }
     .checkbox { display: flex; align-items: center; gap: 8px; }
     .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     button {
@@ -30,6 +33,10 @@
     button:disabled { opacity: 0.5; cursor: not-allowed; }
     .speed-control { display: flex; align-items: center; gap: 12px; }
     .speed-control button { margin-left: auto; }
+    .digits-control { display: flex; gap: 8px; align-items: center; }
+    .digits-control input { flex: 1; }
+    .digits-buttons { display: flex; gap: 8px; }
+    .digits-buttons button { width: 52px; padding-inline: 0; font-size: 1.1rem; }
     .big { font-size: 1.8rem; letter-spacing: 0.04em; word-spacing: 0.2em; }
     .meta { color: #555; font-size: 0.95rem; }
     .row { display: flex; align-items: center; gap: 8px; }
@@ -60,7 +67,13 @@
 
       <label>
         Number of digits (N)
-        <input id="digitsInput" type="number" min="1" max="24" value="6" />
+        <div class="digits-control">
+          <input id="digitsInput" type="number" min="1" max="24" value="6" />
+          <div class="digits-buttons">
+            <button id="digitsDec" type="button" aria-label="Decrease digits">−</button>
+            <button id="digitsInc" type="button" aria-label="Increase digits">+</button>
+          </div>
+        </div>
       </label>
 
       <label class="speed-control">
@@ -96,6 +109,8 @@
   const langSelect = document.getElementById('langSelect');
   const voiceSelect = document.getElementById('voiceSelect');
   const digitsInput = document.getElementById('digitsInput');
+  const digitsDec = document.getElementById('digitsDec');
+  const digitsInc = document.getElementById('digitsInc');
   const rateBtn = document.getElementById('rateBtn');
   const speakBtn = document.getElementById('speakBtn');
   const revealBtn = document.getElementById('revealBtn');
@@ -120,6 +135,13 @@
     const idx = RATE_STEPS.findIndex(s => s.value === currentRate);
     const next = RATE_STEPS[(idx + 1) % RATE_STEPS.length];
     setRateState(next.value);
+    saveSettings();
+  }
+
+  function adjustDigits(delta) {
+    const current = parseInt(digitsInput.value || '6', 10);
+    const clamped = Math.max(1, Math.min(24, current + delta));
+    digitsInput.value = clamped;
     saveSettings();
   }
 
@@ -264,6 +286,8 @@
   // ---------- Events ----------
   // Persist on changes
   rateBtn.addEventListener('click', nextRate);
+  digitsDec.addEventListener('click', () => adjustDigits(-1));
+  digitsInc.addEventListener('click', () => adjustDigits(1));
 
   [langSelect, voiceSelect, digitsInput].forEach(el => {
     el.addEventListener('change', saveSettings);
