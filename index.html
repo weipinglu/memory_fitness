@@ -51,28 +51,28 @@
 </head>
 <body>
 <main>
-  <h1>Number Recall Trainer</h1>
+  <h1 data-i18n="title">Number Recall Trainer</h1>
 
   <!-- Settings -->
   <section class="panel grid" aria-label="settings">
     <div class="fields">
       <label>
-        Language
+        <span data-i18n="label.language">Language</span>
         <select id="langSelect">
-          <option value="en-US">English (en-US)</option>
-          <option value="zh-CN">中文（普通话, zh-CN）</option>
+          <option value="en-US" data-i18n="lang.en">English (en-US)</option>
+          <option value="zh-CN" data-i18n="lang.zh-cn">中文（普通话, zh-CN）</option>
         </select>
       </label>
 
       <label>
-        Voice (device)
+        <span data-i18n="label.voice">Voice (device)</span>
         <select id="voiceSelect">
-          <option value="">Auto (best available)</option>
+          <option value="" data-i18n="option.voice.auto">Auto (best available)</option>
         </select>
       </label>
 
       <label>
-        Number of digits (N)
+        <span data-i18n="label.digits">Number of digits (N)</span>
         <div class="digits-control">
           <input id="digitsInput" type="number" min="1" max="24" value="6" />
           <div class="digits-buttons">
@@ -83,11 +83,11 @@
       </label>
 
       <label class="speed-control">
-        Voice speed
+        <span data-i18n="label.speed">Voice speed</span>
         <div class="speed-buttons" role="group" aria-label="Voice speed">
-          <button type="button" data-rate="0.5">Low</button>
-          <button type="button" data-rate="1">Normal</button>
-          <button type="button" data-rate="1.5">Fast</button>
+          <button type="button" data-rate="0.5" data-i18n="speed.low">Low</button>
+          <button type="button" data-rate="1" data-i18n="speed.normal">Normal</button>
+          <button type="button" data-rate="1.5" data-i18n="speed.fast">Fast</button>
         </div>
       </label>
     </div>
@@ -96,15 +96,15 @@
 
   <!-- Controls -->
   <section class="controls">
-    <button id="speakBtn">Start (Speak)</button>
-    <button id="revealBtn" disabled>Reveal</button>
+    <button id="speakBtn" data-i18n="button.speak">Start (Speak)</button>
+    <button id="revealBtn" data-i18n="button.reveal" disabled>Reveal</button>
   </section>
 
   <!-- Output -->
   <section class="panel grid">
-    <div class="meta">Current number:</div>
+    <div class="meta" data-i18n="meta.current">Current number:</div>
     <div id="numberOut" class="big" aria-live="polite">—</div>
-    <div class="meta">Elapsed since spoken: <span id="elapsedOut">—</span></div>
+    <div class="meta"><span data-i18n="meta.elapsed">Elapsed since spoken:</span> <span id="elapsedOut">—</span></div>
   </section>
 </main>
 
@@ -122,10 +122,83 @@
   const digitsDec = document.getElementById('digitsDec');
   const digitsInc = document.getElementById('digitsInc');
   const rateButtons = Array.from(document.querySelectorAll('.speed-buttons button'));
+  const speedButtonsGroup = document.querySelector('.speed-buttons');
   const speakBtn = document.getElementById('speakBtn');
   const revealBtn = document.getElementById('revealBtn');
   const numberOut = document.getElementById('numberOut');
   const elapsedOut = document.getElementById('elapsedOut');
+
+  const FALLBACK_LANG = 'en-US';
+  const I18N_STRINGS = {
+    'en-US': {
+      title: 'Number Recall Trainer',
+      'label.language': 'Language',
+      'label.voice': 'Voice (device)',
+      'label.digits': 'Number of digits (N)',
+      'label.speed': 'Voice speed',
+      'speed.low': 'Low',
+      'speed.normal': 'Normal',
+      'speed.fast': 'Fast',
+      'button.speak': 'Start (Speak)',
+      'button.reveal': 'Reveal',
+      'meta.current': 'Current number:',
+      'meta.elapsed': 'Elapsed since spoken:',
+      'option.voice.auto': 'Auto (best available)',
+      'digits.decrease': 'Decrease digits',
+      'digits.increase': 'Increase digits',
+      'lang.en': 'English (en-US)',
+      'lang.zh-cn': '中文（普通话, zh-CN）'
+    },
+    'zh-CN': {
+      title: '数字记忆训练器',
+      'label.language': '语言',
+      'label.voice': '语音（设备）',
+      'label.digits': '数字长度（N）',
+      'label.speed': '语速',
+      'speed.low': '慢速',
+      'speed.normal': '正常',
+      'speed.fast': '快速',
+      'button.speak': '开始播报',
+      'button.reveal': '揭示',
+      'meta.current': '当前数字：',
+      'meta.elapsed': '语音结束后经过时间：',
+      'option.voice.auto': '自动（最优）',
+      'digits.decrease': '减少位数',
+      'digits.increase': '增加位数',
+      'lang.en': '英语 (en-US)',
+      'lang.zh-cn': '中文（普通话, zh-CN）'
+    }
+  };
+  function translate(key, lang) {
+    const table = I18N_STRINGS[lang] || I18N_STRINGS[FALLBACK_LANG] || {};
+    return table[key] ?? (I18N_STRINGS[FALLBACK_LANG] ? I18N_STRINGS[FALLBACK_LANG][key] : key) ?? key;
+  }
+
+  function applyTranslations(lang) {
+    const locale = I18N_STRINGS[lang] ? lang : FALLBACK_LANG;
+
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.dataset.i18n;
+      if (!key) return;
+      const text = translate(key, locale);
+      if (typeof text === 'string') el.textContent = text;
+    });
+
+    const attrTargets = [
+      { el: digitsDec, attr: 'aria-label', key: 'digits.decrease' },
+      { el: digitsInc, attr: 'aria-label', key: 'digits.increase' },
+      { el: speakBtn, attr: 'aria-label', key: 'button.speak' },
+      { el: revealBtn, attr: 'aria-label', key: 'button.reveal' },
+      { el: speedButtonsGroup, attr: 'aria-label', key: 'label.speed' }
+    ];
+    attrTargets.forEach(({ el, attr, key }) => {
+      if (!el) return;
+      const text = translate(key, locale);
+      if (typeof text === 'string') el.setAttribute(attr, text);
+    });
+
+    document.title = translate('title', locale);
+  }
 
   let currentRate = 1;
 
@@ -227,7 +300,13 @@
     const lang = langSelect.value;
     const filtered = voicesCache.filter(v => v.lang && v.lang.toLowerCase().startsWith(lang.toLowerCase()));
     const previous = voiceSelect.value;
-    voiceSelect.innerHTML = '<option value="">Auto (best available)</option>';
+    voiceSelect.innerHTML = '';
+
+    const autoOpt = document.createElement('option');
+    autoOpt.value = '';
+    autoOpt.dataset.i18n = 'option.voice.auto';
+    autoOpt.textContent = translate('option.voice.auto', lang);
+    voiceSelect.appendChild(autoOpt);
 
     filtered.forEach(v => {
       const opt = document.createElement('option');
@@ -305,6 +384,7 @@
   // Refresh voices when language changes
   langSelect.addEventListener('change', () => {
     populateVoiceSelect();
+    applyTranslations(langSelect.value);
   });
 
   // Start (Speak)
@@ -350,8 +430,9 @@
   });
 
   // ---------- Init ----------
-  setRateState(currentRate);
   loadSettings();
+  applyTranslations(langSelect.value);
+  setRateState(currentRate);
 
   // Voice enumeration is async in some browsers; handle both paths
   listVoices();
