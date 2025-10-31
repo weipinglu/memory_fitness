@@ -32,7 +32,13 @@
     }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
     .speed-control { display: flex; align-items: center; gap: 12px; }
-    .speed-control button { margin-left: auto; }
+    .speed-buttons { margin-left: auto; display: flex; gap: 8px; }
+    .speed-buttons button { padding-inline: 12px; }
+    .speed-buttons button.active {
+      background: #333;
+      color: #fff;
+      border-color: #333;
+    }
     .digits-control { display: flex; gap: 8px; align-items: center; }
     .digits-control input { flex: 1; }
     .digits-buttons { display: flex; gap: 8px; }
@@ -78,7 +84,11 @@
 
       <label class="speed-control">
         Voice speed
-        <button id="rateBtn" type="button" data-rate="1">Normal</button>
+        <div class="speed-buttons" role="group" aria-label="Voice speed">
+          <button type="button" data-rate="0.5">Low</button>
+          <button type="button" data-rate="1">Normal</button>
+          <button type="button" data-rate="1.5">Fast</button>
+        </div>
       </label>
     </div>
 
@@ -111,31 +121,25 @@
   const digitsInput = document.getElementById('digitsInput');
   const digitsDec = document.getElementById('digitsDec');
   const digitsInc = document.getElementById('digitsInc');
-  const rateBtn = document.getElementById('rateBtn');
+  const rateButtons = Array.from(document.querySelectorAll('.speed-buttons button'));
   const speakBtn = document.getElementById('speakBtn');
   const revealBtn = document.getElementById('revealBtn');
   const numberOut = document.getElementById('numberOut');
   const elapsedOut = document.getElementById('elapsedOut');
 
-  const RATE_STEPS = [
-    { label: 'Slow', value: 0.5 },
-    { label: 'Normal', value: 1 },
-    { label: 'Fast', value: 1.5 }
-  ];
   let currentRate = 1;
 
   function setRateState(rate) {
-    const step = RATE_STEPS.find(s => s.value === rate) || RATE_STEPS[1];
-    currentRate = step.value;
-    rateBtn.dataset.rate = String(step.value);
-    rateBtn.textContent = step.label;
-  }
+    const value = Number(rate);
+    const fallback = rateButtons.find(btn => Number(btn.dataset.rate) === 1) || rateButtons[0] || null;
+    const target = rateButtons.find(btn => Number(btn.dataset.rate) === value) || fallback;
+    currentRate = target ? Number(target.dataset.rate) : 1;
 
-  function nextRate() {
-    const idx = RATE_STEPS.findIndex(s => s.value === currentRate);
-    const next = RATE_STEPS[(idx + 1) % RATE_STEPS.length];
-    setRateState(next.value);
-    saveSettings();
+    rateButtons.forEach(btn => {
+      const isActive = btn === target;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-pressed', String(isActive));
+    });
   }
 
   function adjustDigits(delta) {
@@ -285,7 +289,12 @@
 
   // ---------- Events ----------
   // Persist on changes
-  rateBtn.addEventListener('click', nextRate);
+  rateButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      setRateState(Number(btn.dataset.rate));
+      saveSettings();
+    });
+  });
   digitsDec.addEventListener('click', () => adjustDigits(-1));
   digitsInc.addEventListener('click', () => adjustDigits(1));
 
