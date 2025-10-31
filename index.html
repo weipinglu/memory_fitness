@@ -26,14 +26,17 @@
     input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
     input[type="number"] { -moz-appearance: textfield; }
     .checkbox { display: flex; align-items: center; gap: 8px; }
-    .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .control-buttons { display: flex; gap: 12px; }
+    .counter-group { display: flex; align-items: center; gap: 8px; margin-left: auto; }
     button {
       padding: 12px 16px; font-size: 1rem; border-radius: 10px; border: 1px solid #ccc; cursor: pointer; background: white;
     }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .controls button { padding: 8px 12px; font-size: 0.95rem; border-radius: 8px; }
     .speed-control { display: flex; align-items: center; gap: 12px; }
-    .speed-buttons { margin-left: auto; display: flex; gap: 8px; }
-    .speed-buttons button { padding-inline: 12px; }
+    .speed-buttons { margin-left: auto; display: flex; gap: 8px; flex-wrap: nowrap; }
+    .speed-buttons button { padding: 4px 10px; font-size: 0.85rem; white-space: nowrap; }
     .speed-buttons button.active {
       background: #333;
       color: #fff;
@@ -47,6 +50,7 @@
     .meta { color: #555; font-size: 0.95rem; }
     .row { display: flex; align-items: center; gap: 8px; }
     .value-badge { min-width: 3ch; display: inline-block; text-align: right; }
+    .counter-badge { font-weight: 600; font-size: 1.1rem; }
   </style>
 </head>
 <body>
@@ -65,14 +69,14 @@
       </label>
 
       <label>
-        <span data-i18n="label.voice">Voice (device)</span>
+        <span data-i18n="label.voice">Voice</span>
         <select id="voiceSelect">
           <option value="" data-i18n="option.voice.auto">Auto (best available)</option>
         </select>
       </label>
 
       <label>
-        <span data-i18n="label.digits">Number of digits (N)</span>
+        <span data-i18n="label.digits">Number of digits</span>
         <div class="digits-control">
           <input id="digitsInput" type="number" min="1" max="24" value="6" />
           <div class="digits-buttons">
@@ -83,7 +87,7 @@
       </label>
 
       <label class="speed-control">
-        <span data-i18n="label.speed">Voice speed</span>
+        <span data-i18n="label.speed">Voice speed:</span>
         <div class="speed-buttons" role="group" aria-label="Voice speed">
           <button type="button" data-rate="0.5" data-i18n="speed.low">Low</button>
           <button type="button" data-rate="1" data-i18n="speed.normal">Normal</button>
@@ -96,8 +100,15 @@
 
   <!-- Controls -->
   <section class="controls">
-    <button id="speakBtn" data-i18n="button.speak">Start (Speak)</button>
-    <button id="revealBtn" data-i18n="button.reveal" disabled>Reveal</button>
+    <div class="control-buttons">
+      <button id="speakBtn" data-i18n="button.speak">Start (Speak)</button>
+      <button id="revealBtn" data-i18n="button.reveal" disabled>Reveal</button>
+    </div>
+    <div class="counter-group">
+      <span data-i18n="counter.label">Sessions started:</span>
+      <span id="startCountOut" class="counter-badge" aria-live="polite">0</span>
+      <button id="resetCountBtn" type="button" data-i18n="button.resetCounter">Reset</button>
+    </div>
   </section>
 
   <!-- Output -->
@@ -127,22 +138,26 @@
   const revealBtn = document.getElementById('revealBtn');
   const numberOut = document.getElementById('numberOut');
   const elapsedOut = document.getElementById('elapsedOut');
+  const startCountOut = document.getElementById('startCountOut');
+  const resetCountBtn = document.getElementById('resetCountBtn');
 
   const FALLBACK_LANG = 'en-US';
   const I18N_STRINGS = {
     'en-US': {
       title: 'Number Recall Trainer',
       'label.language': 'Language',
-      'label.voice': 'Voice (device)',
-      'label.digits': 'Number of digits (N)',
-      'label.speed': 'Voice speed',
+      'label.voice': 'Voice',
+      'label.digits': 'Number of digits',
+      'label.speed': 'Voice speed:',
       'speed.low': 'Low',
       'speed.normal': 'Normal',
       'speed.fast': 'Fast',
       'button.speak': 'Start (Speak)',
       'button.reveal': 'Reveal',
+      'button.resetCounter': 'Reset',
       'meta.current': 'Current number:',
       'meta.elapsed': 'Elapsed since spoken:',
+      'counter.label': 'Sessions started:',
       'option.voice.auto': 'Auto (best available)',
       'digits.decrease': 'Decrease digits',
       'digits.increase': 'Increase digits',
@@ -152,16 +167,18 @@
     'zh-CN': {
       title: '数字记忆训练器',
       'label.language': '语言',
-      'label.voice': '语音（设备）',
-      'label.digits': '数字长度（N）',
-      'label.speed': '语速',
+      'label.voice': '语音',
+      'label.digits': '数字位数',
+      'label.speed': '语速：',
       'speed.low': '慢速',
       'speed.normal': '正常',
       'speed.fast': '快速',
       'button.speak': '开始播报',
       'button.reveal': '揭示',
+      'button.resetCounter': '重置',
       'meta.current': '当前数字：',
       'meta.elapsed': '语音结束后经过时间：',
+      'counter.label': '已开始次数：',
       'option.voice.auto': '自动（最优）',
       'digits.decrease': '减少位数',
       'digits.increase': '增加位数',
@@ -189,6 +206,7 @@
       { el: digitsInc, attr: 'aria-label', key: 'digits.increase' },
       { el: speakBtn, attr: 'aria-label', key: 'button.speak' },
       { el: revealBtn, attr: 'aria-label', key: 'button.reveal' },
+      { el: resetCountBtn, attr: 'aria-label', key: 'button.resetCounter' },
       { el: speedButtonsGroup, attr: 'aria-label', key: 'label.speed' }
     ];
     attrTargets.forEach(({ el, attr, key }) => {
@@ -201,6 +219,7 @@
   }
 
   let currentRate = 1;
+  let startCount = 0;
 
   function setRateState(rate) {
     const value = Number(rate);
@@ -222,6 +241,22 @@
     saveSettings();
   }
 
+  function updateStartCountDisplay() {
+    if (startCountOut) startCountOut.textContent = String(startCount);
+  }
+
+  function incrementStartCount() {
+    startCount += 1;
+    updateStartCountDisplay();
+    saveSettings();
+  }
+
+  function resetStartCount() {
+    startCount = 0;
+    updateStartCountDisplay();
+    saveSettings();
+  }
+
   // ---------- Persistence ----------
   const SETTINGS_KEY = 'nr_settings_v1';
   function loadSettings() {
@@ -233,6 +268,7 @@
       if (s.voiceURI) voiceSelect.value = s.voiceURI;
       if (Number.isFinite(s.n)) digitsInput.value = s.n;
       if (Number.isFinite(s.rate)) setRateState(s.rate);
+      if (Number.isFinite(s.startCount)) startCount = s.startCount;
     } catch {}
   }
   function saveSettings() {
@@ -240,7 +276,8 @@
       lang: langSelect.value,
       voiceURI: voiceSelect.value,
       n: parseInt(digitsInput.value || '6', 10),
-      rate: currentRate
+      rate: currentRate,
+      startCount
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
   }
@@ -376,6 +413,7 @@
   });
   digitsDec.addEventListener('click', () => adjustDigits(-1));
   digitsInc.addEventListener('click', () => adjustDigits(1));
+  resetCountBtn.addEventListener('click', resetStartCount);
 
   [langSelect, voiceSelect, digitsInput].forEach(el => {
     el.addEventListener('change', saveSettings);
@@ -390,6 +428,7 @@
   // Start (Speak)
   speakBtn.addEventListener('click', () => {
     resetRound();
+    incrementStartCount();
 
     const n = Math.max(1, Math.min(24, parseInt(digitsInput.value || '6', 10)));
     const lang = langSelect.value;
@@ -432,6 +471,7 @@
   // ---------- Init ----------
   loadSettings();
   applyTranslations(langSelect.value);
+  updateStartCountDisplay();
   setRateState(currentRate);
 
   // Voice enumeration is async in some browsers; handle both paths
