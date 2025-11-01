@@ -134,6 +134,8 @@
   let isListening = false;
   let recognizedDigits = [];
   let processedResultIndex = 0;
+  let beepDelaySeconds = 1; // Delay in seconds before beep plays (default 1)
+  let stopDelaySeconds = 1; // Delay in seconds after stop button click before actually stopping (default 1)
 
   // ---------- Elements ----------
   const langSelect = document.getElementById('langSelect');
@@ -503,6 +505,34 @@
     revealBtn.disabled = true;
   });
 
+  // ---------- Audio Feedback ----------
+  function playBeep() {
+    try {
+      // Create a short beep sound using Web Audio API
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      // Configure beep: 800Hz frequency, 200ms duration, pleasant tone
+      oscillator.frequency.value = 800;
+      oscillator.type = 'sine'; // Sine wave for smooth beep
+      
+      // Fade out to avoid clicking sound
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.2);
+      
+      console.log('🔔 Beep played - recognition ready');
+    } catch (e) {
+      console.warn('Could not play beep:', e);
+    }
+  }
+
   // ---------- Speech Recognition ----------
   function initSpeechRecognition() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -727,6 +757,13 @@
           micBtn.textContent = translate('button.micListening', langSelect.value);
           micBtn.setAttribute('aria-label', translate('button.micListening', langSelect.value));
           console.log('✓ Recognition started successfully');
+          
+          // Play beep N seconds after button click to indicate recognition is ready
+          setTimeout(() => {
+            if (isListening) {
+              playBeep();
+            }
+          }, beepDelaySeconds * 1000);
         } catch (e) {
           console.error('✗ Failed to start recognition:', e);
           if (e.name === 'InvalidStateError' || (e.message && e.message.includes('aborted'))) {
@@ -751,39 +788,45 @@
   }
 
   function stopListening() {
-    console.log('🛑 Stopping recognition...');
+    console.log('🛑 Stop button clicked - waiting before stopping...');
     console.log('  Current state:', {
       recognizedDigits: recognizedDigits,
       count: recognizedDigits.length,
       joined: recognizedDigits.join('')
     });
     
-    isListening = false;
-    if (recognition) {
-      try {
-        recognition.stop();
-        console.log('✓ Recognition.stop() called (results may still arrive)');
-      } catch (e) {
-        console.warn('⚠ Error stopping recognition:', e);
-      }
-    }
-    
+    // Update button immediately for user feedback
     micBtn.textContent = translate('button.mic', langSelect.value);
     micBtn.setAttribute('aria-label', translate('button.mic', langSelect.value));
     
-    // Wait a bit for any pending results to arrive, then update display
+    // Wait for delay before actually stopping (gives time for last digit to be processed)
     setTimeout(() => {
-      if (recognizedDigits.length > 0) {
-        const finalNumber = recognizedDigits.join('');
-        userSpokenOut.textContent = finalNumber;
-        currentDigits = finalNumber;
-        t0 = performance.now();
-        console.log(`✅ Final display updated: "${finalNumber}"`);
-      } else {
-        userSpokenOut.textContent = '—';
-        console.log('⚠ No digits recognized after waiting, showing "—"');
+      console.log(`⏱️ Stop delay (${stopDelaySeconds}s) elapsed - stopping recognition now`);
+      
+      isListening = false;
+      if (recognition) {
+        try {
+          recognition.stop();
+          console.log('✓ Recognition.stop() called');
+        } catch (e) {
+          console.warn('⚠ Error stopping recognition:', e);
+        }
       }
-    }, 500); // Wait 500ms for late-arriving results
+      
+      // Wait a bit more for any final results to arrive, then update display
+      setTimeout(() => {
+        if (recognizedDigits.length > 0) {
+          const finalNumber = recognizedDigits.join('');
+          userSpokenOut.textContent = finalNumber;
+          currentDigits = finalNumber;
+          t0 = performance.now();
+          console.log(`✅ Final display updated: "${finalNumber}"`);
+        } else {
+          userSpokenOut.textContent = '—';
+          console.log('⚠ No digits recognized, showing "—"');
+        }
+      }, 300); // Small additional delay for final results
+    }, stopDelaySeconds * 1000); // Wait configured delay before stopping
   }
 
   // Microphone button click handler
