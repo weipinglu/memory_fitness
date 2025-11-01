@@ -104,6 +104,9 @@
       <button id="speakBtn" data-i18n="button.speak">Start (Speak)</button>
       <button id="revealBtn" data-i18n="button.reveal" disabled>Reveal</button>
     </div>
+    <div class="control-buttons">
+      <button id="micBtn">🎤 Microphone</button>
+    </div>
     <div class="counter-group">
       <span data-i18n="counter.label">Sessions started:</span>
       <span id="startCountOut" class="counter-badge" aria-live="polite">0</span>
@@ -115,6 +118,8 @@
   <section class="panel grid">
     <div class="meta" data-i18n="meta.current">Current number:</div>
     <div id="numberOut" class="big" aria-live="polite">—</div>
+    <div class="meta" data-i18n="meta.userSpoken">User spoken number:</div>
+    <div id="userSpokenOut" class="big" aria-live="polite">—</div>
     <div class="meta"><span data-i18n="meta.elapsed">Elapsed since spoken:</span> <span id="elapsedOut">—</span></div>
   </section>
 </main>
@@ -125,6 +130,10 @@
   let t0 = null;            // timestamp (performance.now) when speech ended
   let speaking = false;
   let voicesCache = [];
+  let recognition = null;
+  let isListening = false;
+  let recognizedDigits = [];
+  let processedResultIndex = 0;
 
   // ---------- Elements ----------
   const langSelect = document.getElementById('langSelect');
@@ -136,7 +145,9 @@
   const speedButtonsGroup = document.querySelector('.speed-buttons');
   const speakBtn = document.getElementById('speakBtn');
   const revealBtn = document.getElementById('revealBtn');
+  const micBtn = document.getElementById('micBtn');
   const numberOut = document.getElementById('numberOut');
+  const userSpokenOut = document.getElementById('userSpokenOut');
   const elapsedOut = document.getElementById('elapsedOut');
   const startCountOut = document.getElementById('startCountOut');
   const resetCountBtn = document.getElementById('resetCountBtn');
@@ -154,8 +165,11 @@
       'speed.fast': 'Fast',
       'button.speak': 'Start (Speak)',
       'button.reveal': 'Reveal',
+      'button.mic': '🎤 Microphone',
+      'button.micListening': '🛑 Stop Recording',
       'button.resetCounter': 'Reset',
       'meta.current': 'Current number:',
+      'meta.userSpoken': 'User spoken number:',
       'meta.elapsed': 'Elapsed since spoken:',
       'counter.label': 'Sessions started:',
       'option.voice.auto': 'Auto (best available)',
@@ -175,8 +189,11 @@
       'speed.fast': '快速',
       'button.speak': '开始播报',
       'button.reveal': '揭示',
+      'button.mic': '🎤 麦克风',
+      'button.micListening': '🛑 停止录音',
       'button.resetCounter': '重置',
       'meta.current': '当前数字：',
+      'meta.userSpoken': '用户说出数字：',
       'meta.elapsed': '语音结束后经过时间：',
       'counter.label': '已开始次数：',
       'option.voice.auto': '自动（最优）',
@@ -214,6 +231,13 @@
       const text = translate(key, locale);
       if (typeof text === 'string') el.setAttribute(attr, text);
     });
+
+    // Update microphone button text and aria-label based on listening state
+    if (micBtn) {
+      const micKey = isListening ? 'button.micListening' : 'button.mic';
+      micBtn.textContent = translate(micKey, locale);
+      micBtn.setAttribute('aria-label', translate(micKey, locale));
+    }
 
     document.title = translate('title', locale);
   }
@@ -322,9 +346,16 @@
 
   function resetRound() {
     numberOut.textContent = '—';
+    userSpokenOut.textContent = '—';
     elapsedOut.textContent = '—';
     currentDigits = null;
     t0 = null;
+    // Stop microphone if listening
+    if (isListening) {
+      stopListening();
+    }
+    recognizedDigits = [];
+    processedResultIndex = 0;
   }
 
   // ---------- Speech ----------
@@ -423,6 +454,10 @@
   langSelect.addEventListener('change', () => {
     populateVoiceSelect();
     applyTranslations(langSelect.value);
+    // Update recognition language if listening
+    if (recognition && isListening) {
+      recognition.lang = langSelect.value;
+    }
   });
 
   // Start (Speak)
@@ -466,6 +501,298 @@
 
     // Optional: keep Reveal enabled if you want to re-check time; here we disable to prevent double-click confusion
     revealBtn.disabled = true;
+  });
+
+  // ---------- Speech Recognition ----------
+  function initSpeechRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.warn('Speech Recognition not supported in this browser');
+      if (micBtn) micBtn.disabled = true;
+      return null;
+    }
+
+    const rec = new SpeechRecognition();
+    
+    // Set up grammar to only recognize digits - this improves accuracy significantly
+    // Check if browser supports grammars (Chrome/Edge support it, Safari doesn't)
+    let grammarSupported = false;
+    if ('webkitSpeechGrammarList' in window || 'SpeechGrammarList' in window) {
+      try {
+        const SpeechGrammarList = window.SpeechGrammarList || window.webkitSpeechGrammarList;
+        const grammarList = new SpeechGrammarList();
+        
+        // Define grammar: only single digits 0-9 (spoken as words or numbers)
+        // Using JSGF format (Java Speech Grammar Format)
+        // Note: Grammar may not fully constrain - some engines still use full vocabulary
+        // but give higher weight to grammar matches
+        const grammar = '#JSGF V1.0; grammar digits; public <digit> = (zero | one | two | three | four | five | six | seven | eight | nine) | ([0-9]);';
+        
+        // Set weight (0.0 to 1.0, higher = more likely to be recognized)
+        grammarList.addFromString(grammar, 1.0);
+        rec.grammars = grammarList;
+        grammarSupported = true;
+        console.log('✓ Grammar configured successfully');
+      } catch (e) {
+        console.warn('✗ Grammar setup failed:', e);
+      }
+    } else {
+      console.log('⚠ Grammar not supported in this browser, using general recognition');
+    }
+    
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.lang = langSelect.value;
+    
+    console.log('Recognition initialized:', {
+      continuous: rec.continuous,
+      interimResults: rec.interimResults,
+      lang: rec.lang,
+      grammarSupported: grammarSupported
+    });
+
+    rec.onresult = (event) => {
+      // Process each result individually
+      const resultCount = event.results.length;
+      
+      console.log(`📥 onresult called: ${resultCount} results, processedIndex: ${processedResultIndex}, isListening: ${isListening}`);
+      
+      // IMPORTANT: Process results even if we've stopped - results may arrive after stop()
+      // This is normal behavior - stop() lets current recognition finish
+      
+      for (let i = processedResultIndex; i < resultCount; i++) {
+        const result = event.results[i];
+        
+        console.log(`  [Result ${i}] isFinal: ${result.isFinal}, hasTranscript: ${!!result[0]}`);
+        
+        if (result[0]) {
+          console.log(`    Transcript: "${result[0].transcript}"`);
+        }
+        
+        if (result.isFinal && result[0]) {
+          const transcript = result[0].transcript.trim();
+          console.log(`  ✓ Processing FINAL result ${i}: "${transcript}"`);
+          
+          // Extract ALL digits from the transcript
+          const extractedDigits = [];
+          
+          // 1. Extract all numeric digits (most reliable)
+          const numMatches = transcript.match(/[0-9]/g);
+          if (numMatches) {
+            console.log(`    Found numeric digits: [${numMatches.join(', ')}]`);
+            extractedDigits.push(...numMatches);
+          }
+          
+          // 2. Extract English digit words if no numeric digits found
+          if (extractedDigits.length === 0) {
+            console.log(`    No numeric digits, checking word digits...`);
+            const lower = transcript.toLowerCase();
+            const wordMap = {
+              'zero': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4',
+              'five': '5', 'six': '6', 'seven': '7', 'eight': '8', 'nine': '9'
+            };
+            
+            const words = lower.split(/\s+/);
+            console.log(`    Split into words: [${words.join(', ')}]`);
+            for (const word of words) {
+              const cleanWord = word.replace(/[^\w]/g, '');
+              if (wordMap[cleanWord]) {
+                console.log(`    ✓ Matched word "${word}" -> "${wordMap[cleanWord]}"`);
+                extractedDigits.push(wordMap[cleanWord]);
+              }
+            }
+          }
+          
+          // 3. Extract Chinese digits
+          const chineseMatches = transcript.match(/[零一二三四五六七八九]/g);
+          if (chineseMatches) {
+            console.log(`    Found Chinese digits: [${chineseMatches.join(', ')}]`);
+            const chineseMap = {
+              '零': '0', '一': '1', '二': '2', '三': '3', '四': '4',
+              '五': '5', '六': '6', '七': '7', '八': '8', '九': '9'
+            };
+            for (const chinese of chineseMatches) {
+              if (chineseMap[chinese]) {
+                extractedDigits.push(chineseMap[chinese]);
+              }
+            }
+          }
+          
+          console.log(`    Total extracted digits: [${extractedDigits.join(', ')}]`);
+          
+          // Add all extracted digits (process even if we've stopped - may arrive late)
+          if (extractedDigits.length > 0) {
+            for (const digit of extractedDigits) {
+              recognizedDigits.push(digit);
+            }
+            console.log(`    ✓ Added to recognizedDigits. New total: "${recognizedDigits.join('')}"`);
+            
+            // If we've already stopped, update the display now
+            if (!isListening && userSpokenOut) {
+              const finalNumber = recognizedDigits.join('');
+              userSpokenOut.textContent = finalNumber;
+              currentDigits = finalNumber;
+              t0 = performance.now();
+              console.log(`    ↻ Updated display after stop: "${finalNumber}"`);
+            }
+          } else {
+            console.log(`    ✗ No digits extracted from transcript: "${transcript}"`);
+            console.log(`    ⚠ Grammar may not be working - received non-digit: "${transcript}"`);
+          }
+          
+          // Update processed index
+          processedResultIndex = i + 1;
+          console.log(`    Updated processedResultIndex to: ${processedResultIndex}`);
+        }
+      }
+    };
+
+    rec.onerror = (event) => {
+      console.error('❌ Speech recognition error:', event.error);
+      console.error('  Error details:', {
+        error: event.error,
+        message: event.message,
+        isListening: isListening
+      });
+      if (event.error === 'no-speech' || event.error === 'aborted') {
+        // These are normal, don't show error to user
+        console.log('  (Normal error, continuing...)');
+        return;
+      }
+      stopListening();
+    };
+
+    rec.onend = () => {
+      console.log('🔚 Recognition ended');
+      console.log('  isListening:', isListening);
+      
+      // If we're still supposed to be listening, restart after a short delay
+      if (isListening && recognition) {
+        // Reset processedResultIndex when restarting - results array resets on restart
+        processedResultIndex = 0;
+        console.log('  ↻ Will restart, reset processedResultIndex to 0');
+        setTimeout(() => {
+          if (isListening && recognition) {
+            try {
+              console.log('  ↻ Restarting recognition...');
+              recognition.start();
+              console.log('  ✓ Restart successful');
+            } catch (e) {
+              console.warn('  ✗ Restart failed:', e);
+              // Recognition might already be starting, ignore
+            }
+          }
+        }, 100);
+      } else {
+        processedResultIndex = 0;
+        console.log('  ✓ Stopped, reset processedResultIndex to 0');
+      }
+    };
+
+    return rec;
+  }
+
+  function startListening() {
+    if (!recognition) {
+      recognition = initSpeechRecognition();
+      if (!recognition) return;
+    }
+
+    // Reset everything for a fresh start
+    recognizedDigits = [];
+    processedResultIndex = 0;
+    userSpokenOut.textContent = '...'; // Show indication that recording is active
+    isListening = true;
+    recognition.lang = langSelect.value;
+
+    // Stop any existing recognition first and wait for it to fully stop
+    try {
+      recognition.stop();
+    } catch (e) {
+      // Ignore if not running
+    }
+
+    // Start recognition after a brief pause to ensure clean start
+    setTimeout(() => {
+      if (isListening && recognition) {
+        try {
+          console.log('🎤 Starting recognition...');
+          console.log('  State before start:', {
+            isListening: isListening,
+            processedResultIndex: processedResultIndex,
+            recognizedDigits: recognizedDigits,
+            lang: recognition.lang
+          });
+          recognition.start();
+          micBtn.textContent = translate('button.micListening', langSelect.value);
+          micBtn.setAttribute('aria-label', translate('button.micListening', langSelect.value));
+          console.log('✓ Recognition started successfully');
+        } catch (e) {
+          console.error('✗ Failed to start recognition:', e);
+          if (e.name === 'InvalidStateError' || (e.message && e.message.includes('aborted'))) {
+            setTimeout(() => {
+              if (isListening && recognition) {
+                try {
+                  console.log('🔄 Retrying recognition start...');
+                  recognition.start();
+                  console.log('✓ Retry successful');
+                } catch (e2) {
+                  console.error('✗ Retry failed:', e2);
+                  isListening = false;
+                }
+              }
+            }, 300);
+          } else {
+            isListening = false;
+          }
+        }
+      }
+    }, 150);
+  }
+
+  function stopListening() {
+    console.log('🛑 Stopping recognition...');
+    console.log('  Current state:', {
+      recognizedDigits: recognizedDigits,
+      count: recognizedDigits.length,
+      joined: recognizedDigits.join('')
+    });
+    
+    isListening = false;
+    if (recognition) {
+      try {
+        recognition.stop();
+        console.log('✓ Recognition.stop() called (results may still arrive)');
+      } catch (e) {
+        console.warn('⚠ Error stopping recognition:', e);
+      }
+    }
+    
+    micBtn.textContent = translate('button.mic', langSelect.value);
+    micBtn.setAttribute('aria-label', translate('button.mic', langSelect.value));
+    
+    // Wait a bit for any pending results to arrive, then update display
+    setTimeout(() => {
+      if (recognizedDigits.length > 0) {
+        const finalNumber = recognizedDigits.join('');
+        userSpokenOut.textContent = finalNumber;
+        currentDigits = finalNumber;
+        t0 = performance.now();
+        console.log(`✅ Final display updated: "${finalNumber}"`);
+      } else {
+        userSpokenOut.textContent = '—';
+        console.log('⚠ No digits recognized after waiting, showing "—"');
+      }
+    }, 500); // Wait 500ms for late-arriving results
+  }
+
+  // Microphone button click handler
+  micBtn.addEventListener('click', () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
   });
 
   // ---------- Init ----------
